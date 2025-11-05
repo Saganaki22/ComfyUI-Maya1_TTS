@@ -1,0 +1,17 @@
+laugh
+laugh_harder
+giggle
+chuckle
+cry
+sigh
+gasp
+whisper
+angry
+scream
+snort
+yawn
+cough
+sneeze
+breathing
+humming
+throat_clearing

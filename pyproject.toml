@@ -1,0 +1,27 @@
+[project]
+name = "ComfyUI-Maya1_TTS"
+description = "ComfyUI node for Maya1 TTS - Expressive voice generation with 20+ emotions, voice design, and SNAC neural codec"
+version = "1.0.0"
+license = {file = "LICENSE"}
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.50.0",
+    "numpy>=1.21.0",
+    "snac>=1.0.0",
+]
+
+[project.optional-dependencies]
+# Optional dependencies for enhanced performance and memory efficiency
+quantization = ["bitsandbytes>=0.41.0"]
+flash-attention = ["flash-attn>=2.0.0"]
+sage-attention = ["sageattention>=1.0.0"]
+all = ["bitsandbytes>=0.41.0", "flash-attn>=2.0.0", "sageattention>=1.0.0"]
+
+[project.urls]
+Repository = "https://github.com/Saganaki22/ComfyUI-Maya1_TTS"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "saganaki22"
+DisplayName = "Maya1 TTS"
+Icon = "https://avatars.githubusercontent.com/u/84208527"

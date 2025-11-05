@@ -1,0 +1,65 @@
+# Maya1 Voice Description Examples
+
+## Basic Voice Descriptions
+
+### Female Voices
+- Female, in her 30s with an American accent and is an event host, energetic, clear diction
+- Female voice in their 20s with a British accent. High pitch, warm timbre, fast pacing, happy tone
+- Mythical godlike magical character, Female voice in their 30s slow pacing, curious tone at medium intensity
+
+### Male Voices
+- Realistic male voice in the 30s age with american accent. Normal pitch, warm timbre, conversational pacing
+- Dark villain character, Male voice in their 40s with a British accent. low pitch, gravelly timbre, slow pacing, angry tone at high intensity
+- Demon character, Male voice in their 30s with a Middle Eastern accent. screaming tone at high intensity
+
+## Emotion Tag Examples
+
+### Text with Emotions
+- Hello! This is Maya1 <laugh> the best open source voice AI model with emotions.
+- Wow. This place looks even better than I imagined. <gasp> How did they set all this up so perfectly?
+- Welcome back to another episode of our podcast! <laugh_harder> Today we are diving into an absolutely fascinating topic
+- After all we went through to pull him out of that mess <cry> I can't believe he was the traitor
+- You dare challenge me, mortal <snort> how amusing. Your kind always thinks they can win
+- I can't believe you did that <sigh> we talked about this so many times already
+
+## Available Emotion Tags
+<laugh>, <laugh_harder>, <giggle>, <chuckle>, <cry>, <sigh>, <gasp>, <whisper>, <angry>, <scream>, <snort>, <yawn>, <cough>, <sneeze>, <breathing>, <humming>, <throat_clearing>
+
+## Voice Description Components
+
+### Age
+- in their 20s
+- in their 30s
+- in their 40s
+- in their 50s
+
+### Accent
+- American accent
+- British accent
+- Middle Eastern accent
+- Australian accent
+- Indian accent
+
+### Pitch
+- high pitch
+- normal pitch
+- low pitch
+
+### Timbre
+- warm timbre
+- gravelly timbre
+- smooth timbre
+- raspy timbre
+
+### Pacing
+- fast pacing
+- conversational pacing
+- slow pacing
+
+### Tone & Intensity
+- happy tone at high intensity
+- angry tone at medium intensity
+- curious tone at low intensity
+- energetic
+- calm
+- dramatic

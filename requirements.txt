@@ -1,0 +1,18 @@
+# Core dependencies for Maya1 TTS ComfyUI integration
+torch>=2.0.0
+transformers>=4.40.0
+numpy>=1.24.0
+
+# SNAC audio codec
+snac>=1.0.0
+
+# Audio processing
+soundfile>=0.12.0
+
+# Optional: Accelerated attention mechanisms (uncomment to enable)
+# flash-attn>=2.5.0          # Flash Attention 2 (fastest, CUDA only)
+# sageattention>=1.0.0       # Sage Attention (memory efficient)
+
+# Optional: Performance optimization
+# accelerate>=0.20.0         # For better device management
+# xformers>=0.0.20           # Additional attention optimizations
