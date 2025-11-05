@@ -1,1 +1,1 @@
-# -ComfyUI-Maya1_TTS
+# ComfyUI-Maya1_TTS
