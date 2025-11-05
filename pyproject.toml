@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI-Maya1_TTS"
 description = "ComfyUI node for Maya1 TTS - Expressive voice generation with 20+ emotions, voice design, and SNAC neural codec"
-version = "1.0.1"
+version = "1.0.2"
 license = {file = "LICENSE"}
 dependencies = [
     "torch>=2.0.0",
