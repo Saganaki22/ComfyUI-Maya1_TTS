@@ -37,7 +37,7 @@ A ComfyUI node pack for [Maya1](https://huggingface.co/maya-research/maya1), a 3
 
 ```bash
 cd ComfyUI/custom_nodes/
-git clone https://github.com/Saganaki22/-ComfyUI-Maya1_TTS.git
+git clone https://github.com/Saganaki22/ComfyUI-Maya1_TTS.git
 cd ComfyUI-Maya1_TTS
 ```
 
@@ -140,7 +140,7 @@ cd ComfyUI
 mkdir -p models/maya1-TTS
 
 # Download model
-huggingface-cli download maya-research/maya1 --local-dir models/maya1-TTS/maya1
+hf download maya-research/maya1 --local-dir models/maya1-TTS/maya1
 ```
 
 ### Option 2: Python Script
