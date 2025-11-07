@@ -16,15 +16,28 @@ A ComfyUI node pack for [Maya1](https://huggingface.co/maya-research/maya1), a 3
 
 ## ✨ Features
 
+### Core Features
 - 🎭 **Voice Design** through natural language descriptions
-- 😊 **20+ Emotions**: laugh, cry, whisper, angry, sigh, gasp, scream, and more
+- 😊 **16 Emotion Tags**: laugh, cry, whisper, angry, sigh, gasp, scream, and more
 - ⚡ **Real-time Generation** with SNAC neural codec (24kHz audio)
 - 🔧 **Multiple Attention Mechanisms**: SDPA, Flash Attention 2, Sage Attention
 - 💾 **Quantization Support**: 4-bit and 8-bit for memory-constrained GPUs
+- 📦 **GGUF Model Support**: Lightweight quantized models (just `pip install gguf` - no compilation!)
 - 🛑 **Native ComfyUI Cancel**: Stop generation anytime
 - 📊 **Progress Tracking**: Real-time token generation speed (it/s)
 - 🔄 **Model Caching**: Fast subsequent generations
 - 🎯 **Smart VRAM Management**: Auto-clears on dtype changes
+
+### Custom Canvas UI
+- 🎨 **Beautiful Dark Theme** with purple accents and smooth animations
+- 👤 **5 Character Presets**: Quick-load voice templates (Male US, Female UK, Announcer, Robot, Demon)
+- 🎭 **16 Visual Emotion Buttons**: One-click emotion tag insertion at cursor position
+- ⛶ **Lightbox Modal Editor**: Fullscreen text editor for longform content
+- ⌨️ **Advanced Keyboard Shortcuts**: Multiline editing with Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Enter
+- 📝 **Inline Text Editing**: Click-to-edit with cursor positioning and drag-to-select
+- 🖱️ **Scroll Support**: Mouse wheel scrolling in text fields
+- 💡 **Contextual Tooltips**: Helpful hints on every control
+- 🎬 **Collapsible Sections**: Clean, organized interface
 
 ---
 
@@ -37,7 +50,7 @@ A ComfyUI node pack for [Maya1](https://huggingface.co/maya-research/maya1), a 3
 
 ```bash
 cd ComfyUI/custom_nodes/
-git clone https://github.com/Saganaki22/ComfyUI-Maya1_TTS.git
+git clone https://github.com/Saganaki22/-ComfyUI-Maya1_TTS.git
 cd ComfyUI-Maya1_TTS
 ```
 
@@ -140,7 +153,7 @@ cd ComfyUI
 mkdir -p models/maya1-TTS
 
 # Download model
-hf download maya-research/maya1 --local-dir models/maya1-TTS/maya1
+huggingface-cli download maya-research/maya1 --local-dir models/maya1-TTS/maya1
 ```
 
 ### Option 2: Python Script
@@ -177,7 +190,44 @@ Restart ComfyUI to load the new nodes. The node will appear under:
 
 ### Node: Maya1 TTS (AIO)
 
-All-in-one node for loading models and generating speech.
+All-in-one node for loading models and generating speech with a beautiful custom canvas UI.
+
+![Maya1 TTS Custom UI](https://github.com/user-attachments/assets/fbb48a04-7157-42a7-b77c-d091e6deb926)
+
+### ✨ Custom Canvas Interface
+
+The node features a completely custom-built interface with:
+
+**Character Presets** (Top Row)
+- Click any preset to instantly load a pre-configured voice description
+- 5 presets: ♂️ Male US, ♀️ Female UK, 🎙️ Announcer, 🤖 Robot, 😈 Demon
+
+**Text Fields**
+- **Voice Description**: Describe your desired voice characteristics
+- **Text**: Your script with optional emotion tags
+- Click inside to edit with full keyboard support
+- Press **Enter** for new line, **Ctrl+Enter** to save, **Escape** to cancel
+
+**Emotion Tags** (Collapsible Grid)
+- 16 emotion buttons in 4×4 grid
+- Click any emotion to insert tag at cursor position
+- Tags insert where you're typing, not just at the end
+- Click header to collapse/expand section
+
+**⛶ Lightbox Modal** (Bottom right of Text field)
+- Click the expand button for fullscreen text editing
+- Large text area perfect for longform content
+- All emotion buttons available inside modal
+- Mouse wheel scrolling with visual scrollbar
+- **Enter** to save and close, **Escape** to cancel
+
+**Keyboard Shortcuts**
+- `Enter`: New line (in text fields)
+- `Ctrl+Enter`: Save changes
+- `Escape`: Cancel editing
+- `Ctrl+A`: Select all text
+- `Ctrl+C/V/X`: Copy, paste, cut
+- Click outside field: Auto-save
 
 <details>
 <summary><b>Model Settings</b></summary>
@@ -211,10 +261,11 @@ All-in-one node for loading models and generating speech.
 <details>
 <summary><b>Voice & Text Settings</b></summary>
 
-**voice_description** (multiline text)
+**voice_description**
 
-Describe the voice using natural language:
+Describe the voice using natural language. Click inside to edit or use character presets.
 
+**Example:**
 ```
 Realistic male voice in the 30s with American accent. Normal pitch, warm timbre, conversational pacing.
 ```
@@ -228,13 +279,18 @@ Realistic male voice in the 30s with American accent. Normal pitch, warm timbre,
 - **Pacing**: `fast pacing`, `conversational`, `slow pacing`
 - **Tone**: `happy`, `angry`, `curious`, `energetic`, `calm`
 
-**text** (multiline text)
+**💡 Tip**: Use character presets for quick voice templates!
 
-Text to synthesize with optional emotion tags:
+**text**
 
+Text to synthesize with optional emotion tags. Click emotion buttons to insert tags at cursor.
+
+**Example:**
 ```
 Hello! This is Maya1 <laugh> the best open source voice AI!
 ```
+
+**💡 Tip**: Click ⛶ expand button for longform text editing in fullscreen modal!
 
 </details>
 
@@ -245,6 +301,11 @@ Hello! This is Maya1 <laugh> the best open source voice AI!
 - `True`: Keep model loaded for faster repeated generations
 - `False`: Clear VRAM after generation (saves memory)
 - Auto-clears when dtype changes
+
+**chunk_longform** (boolean) ⚠️ EXPERIMENTAL
+- `True`: Auto-split long text (>80 words) at sentences, combines audio
+- `False`: Generate entire text at once (may fail if too long)
+- **Note**: This feature is experimental and may have quality/timing issues
 
 **temperature** (0.1-2.0, default: 0.4)
 - Lower = more consistent
@@ -282,8 +343,9 @@ Hello! This is Maya1 <laugh> the best open source voice AI!
 
 ## 🎭 Emotion Tags
 
-Add emotions anywhere in your text using `<tag>` syntax:
+Add emotions anywhere in your text using `<tag>` syntax, or click the visual emotion buttons in the UI!
 
+**Examples:**
 ```
 Hello! This is amazing <laugh> I can't believe it!
 ```
@@ -297,7 +359,7 @@ Wow! <gasp> This place looks incredible!
 ```
 
 <details>
-<summary><b>All 17 Available Emotions (Click to expand)</b></summary>
+<summary><b>All 16 Available Emotions (Click to expand)</b></summary>
 
 **Laughter & Joy:**
 - `<laugh>` - Normal laugh
@@ -311,24 +373,23 @@ Wow! <gasp> This place looks incredible!
 
 **Surprise & Breath:**
 - `<gasp>` - Surprised gasp
-- `<breathing>` - Heavy breathing
+- `<excited>` - Excited tone
 
 **Intensity & Emotion:**
 - `<whisper>` - Whispering
 - `<angry>` - Angry tone
 - `<scream>` - Screaming
+- `<sarcastic>` - Sarcastic delivery
 
 **Natural Sounds:**
 - `<snort>` - Snorting
-- `<yawn>` - Yawning
-- `<cough>` - Coughing
-- `<sneeze>` - Sneezing
-- `<humming>` - Humming
-- `<throat_clearing>` - Clearing throat
+- `<exhale>` - Exhaling
+- `<gulp>` - Gulping
+- `<sing>` - Singing
 
 </details>
 
-**💡 Tip:** Hover over the node title to see all emotion tags and usage examples!
+**💡 Tip:** Click emotion buttons in the node UI to insert tags at cursor position!
 
 ---
 
@@ -666,13 +727,16 @@ ComfyUI-Maya1_TTS/
 ├── __init__.py                 # Node registration
 ├── nodes/
 │   ├── __init__.py
-│   └── maya1_tts_combined.py   # AIO node
+│   └── maya1_tts_combined.py   # AIO node (backend)
+├── js/
+│   ├── maya1_tts.js            # Custom canvas UI (1800+ lines)
+│   └── config.js               # UI config (presets, emotions, tooltips)
 ├── core/
 │   ├── model_wrapper.py        # Model loading & quantization
 │   ├── snac_decoder.py         # SNAC audio decoding
 │   └── utils.py                # Utilities & cancel support
 ├── resources/
-│   ├── emotions.txt            # 17 emotion tags
+│   ├── emotions.txt            # 16 emotion tags
 │   └── prompt_examples.txt     # Voice description examples
 ├── pyproject.toml              # Package metadata
 ├── requirements.txt            # Dependencies
@@ -684,17 +748,20 @@ ComfyUI-Maya1_TTS/
 <details>
 <summary><b>ComfyUI Integration</b></summary>
 
+- **Custom Canvas UI**: Full JavaScript UI with LiteGraph.js canvas API
 - **Cancel Support**: Native `execution.interruption_requested()`
 - **Progress Bars**: `comfy.utils.ProgressBar`
 - **Audio Format**: ComfyUI AUDIO type (24kHz mono)
 - **Model Caching**: Automatic with dtype change detection
 - **VRAM Management**: Manual control via toggle
+- **Event Handling**: Document-level keyboard/mouse capture for proper text editing
+- **Visual Feedback**: Real-time tooltips, animations, and hover states
 
 </details>
 
 
 
-https://github.com/user-attachments/assets/7a5b0f96-8d59-4e32-870b-03017ecc111f
+https://github.com/user-attachments/assets/0a667f5b-f93a-4cc4-a0d5-030c6d9b1be7
 
 
 
