@@ -17,7 +17,8 @@ from ..core import (
     get_maya1_models_dir,
     format_prompt,
     check_interruption,
-    load_emotions_list
+    load_emotions_list,
+    crossfade_audio
 )
 
 def split_text_smartly(text: str, max_words_per_chunk: int = 100) -> List[str]:
@@ -166,10 +167,11 @@ class Maya1TTSCombinedNode:
                     "step": 0.05
                 }),
                 "max_tokens": ("INT", {
-                    "default": 2000,
+                    "default": 4000,
                     "min": 100,
-                    "max": 8000,
-                    "step": 100
+                    "max": 16000,
+                    "step": 100,
+                    "tooltip": "Max SNAC tokens per chunk. Higher = longer audio per chunk (~50 tokens/word). 4000 tokens ≈ 30-40s audio"
                 }),
                 "repetition_penalty": ("FLOAT", {
                     "default": 1.1,
@@ -184,7 +186,7 @@ class Maya1TTSCombinedNode:
                 }),
                 "chunk_longform": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Automatically split long text into chunks at sentence boundaries and combine audio"
+                    "tooltip": "Split long text into chunks at sentence boundaries with smooth crossfading. Enables unlimited audio length beyond the 18-20s limit"
                 }),
                 "debug_mode": ("BOOLEAN", {
                     "default": False,
@@ -338,11 +340,11 @@ class Maya1TTSCombinedNode:
 
             # Calculate words per chunk based on max_tokens
             # Empirical data: 1 word ≈ 50-55 SNAC tokens
-            # Leave some headroom (70%) to avoid exceeding max_tokens
-            estimated_words_per_chunk = int((max_tokens * 0.7) / 50)
-            estimated_words_per_chunk = max(50, min(estimated_words_per_chunk, 200))  # Clamp between 50-200
+            # Leave some headroom (80%) to avoid exceeding max_tokens
+            estimated_words_per_chunk = int((max_tokens * 0.8) / 50)
+            estimated_words_per_chunk = max(50, min(estimated_words_per_chunk, 300))  # Clamp between 50-300
 
-            print(f"📏 Max tokens: {max_tokens} → ~{estimated_words_per_chunk} words per chunk")
+            print(f"📏 Max tokens: {max_tokens} → ~{estimated_words_per_chunk} words per chunk (~{estimated_words_per_chunk / 150:.1f}min per chunk)")
 
             text_chunks = split_text_smartly(text, max_words_per_chunk=estimated_words_per_chunk)
             print(f"📦 Split into {len(text_chunks)} chunks")
@@ -385,14 +387,25 @@ class Maya1TTSCombinedNode:
                 check_interruption()
 
             print(f"\n{'=' * 70}")
-            print(f"🔗 Concatenating {len(all_audio_data)} audio chunks...")
+            print(f"🔗 Combining {len(all_audio_data)} audio chunks with crossfading...")
 
-            # Concatenate all audio chunks along time dimension (axis=2 or -1)
-            # Audio shape: [batch, channels, samples] -> concatenate on samples axis
-            combined_waveform_np = np.concatenate(all_audio_data, axis=-1)
+            # Combine audio chunks with crossfading for smooth transitions
+            # Crossfade duration: 50ms = 1200 samples at 24kHz
+            combined_waveform_np = all_audio_data[0]
 
-            # Convert to torch tensor (ComfyUI expects torch tensors with .cpu() method)
-            combined_waveform = torch.from_numpy(combined_waveform_np)
+            for i in range(1, len(all_audio_data)):
+                # Crossfade between chunks (1200 samples = 50ms at 24kHz)
+                combined_waveform_np = crossfade_audio(
+                    combined_waveform_np,
+                    all_audio_data[i],
+                    crossfade_samples=1200
+                )
+
+            # Ensure it's a torch tensor
+            if not isinstance(combined_waveform_np, torch.Tensor):
+                combined_waveform = torch.from_numpy(combined_waveform_np)
+            else:
+                combined_waveform = combined_waveform_np
 
             print(f"✅ Generated {combined_waveform.shape[-1] / sample_rate:.2f}s of audio from {len(text_chunks)} chunks")
             print("=" * 70)
