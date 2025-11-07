@@ -115,6 +115,10 @@ def decode_snac_to_audio(codes: List[List[int]], snac_model, device: str = "cuda
     # Extract audio: shape is [batch, channels, samples]
     audio = audio_tensor[0, 0].cpu().numpy()
 
+    # Trim warmup samples (first 2048 samples) - from official transformers_inference.py
+    if len(audio) > 2048:
+        audio = audio[2048:]
+
     return audio
 
 
