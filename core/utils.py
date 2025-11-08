@@ -198,3 +198,94 @@ class ProgressCallback:
         """Close the progress bar."""
         if self.pbar is not None:
             self.pbar.update(self.total_steps - self.current_step)
+
+
+def crossfade_audio(audio1, audio2, crossfade_samples: int = 1200):
+    """
+    Crossfade two audio arrays for smooth transitions.
+
+    Args:
+        audio1: First audio array (numpy or torch)
+        audio2: Second audio array (numpy or torch)
+        crossfade_samples: Number of samples to crossfade (default 1200 = 50ms at 24kHz)
+
+    Returns:
+        Crossfaded audio array
+    """
+    import numpy as np
+    import torch
+
+    # Convert to numpy for processing
+    is_torch = False
+    if isinstance(audio1, torch.Tensor):
+        is_torch = True
+        audio1_np = audio1.cpu().numpy()
+        audio2_np = audio2.cpu().numpy()
+    else:
+        audio1_np = audio1
+        audio2_np = audio2
+
+    # Handle different shapes: [batch, channels, samples] or [samples]
+    if audio1_np.ndim == 3:
+        # Shape: [batch, channels, samples]
+        batch, channels, samples1 = audio1_np.shape
+        samples2 = audio2_np.shape[2]
+
+        # Ensure crossfade_samples doesn't exceed audio length
+        crossfade_samples = min(crossfade_samples, samples1, samples2)
+
+        if crossfade_samples > 0:
+            # Create fade curves
+            fade_out = np.linspace(1.0, 0.0, crossfade_samples).reshape(1, 1, -1)
+            fade_in = np.linspace(0.0, 1.0, crossfade_samples).reshape(1, 1, -1)
+
+            # Apply crossfade to overlapping region
+            audio1_fade = audio1_np.copy()
+            audio1_fade[:, :, -crossfade_samples:] *= fade_out
+
+            audio2_fade = audio2_np.copy()
+            audio2_fade[:, :, :crossfade_samples] *= fade_in
+
+            # Combine: audio1 (minus fade region) + crossfade + audio2 (minus fade region)
+            result = np.concatenate([
+                audio1_fade[:, :, :-crossfade_samples],
+                audio1_fade[:, :, -crossfade_samples:] + audio2_fade[:, :, :crossfade_samples],
+                audio2_fade[:, :, crossfade_samples:]
+            ], axis=2)
+        else:
+            # No crossfade, just concatenate
+            result = np.concatenate([audio1_np, audio2_np], axis=2)
+
+    elif audio1_np.ndim == 1:
+        # Shape: [samples]
+        samples1 = len(audio1_np)
+        samples2 = len(audio2_np)
+
+        crossfade_samples = min(crossfade_samples, samples1, samples2)
+
+        if crossfade_samples > 0:
+            fade_out = np.linspace(1.0, 0.0, crossfade_samples)
+            fade_in = np.linspace(0.0, 1.0, crossfade_samples)
+
+            audio1_fade = audio1_np.copy()
+            audio1_fade[-crossfade_samples:] *= fade_out
+
+            audio2_fade = audio2_np.copy()
+            audio2_fade[:crossfade_samples] *= fade_in
+
+            result = np.concatenate([
+                audio1_fade[:-crossfade_samples],
+                audio1_fade[-crossfade_samples:] + audio2_fade[:crossfade_samples],
+                audio2_fade[crossfade_samples:]
+            ])
+        else:
+            result = np.concatenate([audio1_np, audio2_np])
+
+    else:
+        raise ValueError(f"Unexpected audio shape: {audio1_np.shape}")
+
+    # Convert back to torch if needed
+    if is_torch:
+        result = torch.from_numpy(result)
+
+    return result

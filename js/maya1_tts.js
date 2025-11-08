@@ -31,9 +31,11 @@ class Maya1TTSCanvas {
         this.scrollOffsets = {}; // Scroll offset for each text field
         this.wheelHandler = null; // Store bound wheel handler
         this.mouseUpHandler = null; // Store bound mouseup handler for drag end
-        this.lightboxOpen = false; // Track if lightbox is open
-        this.lightboxField = null; // Which field is being edited in lightbox
-        this.lightboxScrollOffset = 0; // Scroll offset for lightbox text
+        this.htmlModalOpen = false; // Track if HTML modal is open
+        this.htmlModalElement = null; // Reference to HTML modal element
+        this.htmlModalFontSize = 15; // Default font size for modal textarea
+        this.cursorVisible = true; // Cursor blink state
+        this.cursorBlinkInterval = null; // Interval for cursor blinking
 
         this.setupNode();
     }
@@ -85,10 +87,18 @@ class Maya1TTSCanvas {
 
         node.onMouseDown = function(e, pos, canvas) {
             if (e.canvasY - this.pos[1] < 0) return false;
-            return self.handleMouseDown(e, pos, canvas);
+            // If HTML modal is open, block ComfyUI from processing
+            if (self.htmlModalOpen) return true;
+            const result = self.handleMouseDown(e, pos, canvas);
+            return result;
         };
 
         node.onMouseMove = function(e, pos, canvas) {
+            // CRITICAL: Block ALL mouse events when HTML modal is open
+            if (self.htmlModalOpen) {
+                return true; // Block ComfyUI from processing
+            }
+
             // Safety check: if mouse buttons are not pressed but isDragging is true, clear it
             if (self.isDragging && e.buttons === 0) {
                 self.isDragging = false;
@@ -124,6 +134,9 @@ class Maya1TTSCanvas {
             this.scrollOffsets[fieldLabel] = 0;
         }
 
+        // Start cursor blinking
+        this.startCursorBlink();
+
         // Create and attach document-level keyboard handler
         this.keydownHandler = (e) => this.handleKeyDown(e);
         document.addEventListener('keydown', this.keydownHandler, true); // Use capture phase
@@ -154,6 +167,9 @@ class Maya1TTSCanvas {
             }
         }
 
+        // Stop cursor blinking
+        this.stopCursorBlink();
+
         // Remove document-level keyboard handler
         if (this.keydownHandler) {
             document.removeEventListener('keydown', this.keydownHandler, true);
@@ -178,6 +194,583 @@ class Maya1TTSCanvas {
         this.isDragging = false;
         this.dragStartPos = null;
         this.node.setDirtyCanvas(true, true);
+    }
+
+    startCursorBlink() {
+        // Stop any existing blink interval
+        this.stopCursorBlink();
+
+        // Start cursor visible
+        this.cursorVisible = true;
+
+        // Blink cursor every 530ms (standard blink rate)
+        this.cursorBlinkInterval = setInterval(() => {
+            this.cursorVisible = !this.cursorVisible;
+            this.node.setDirtyCanvas(true, true);
+        }, 530);
+    }
+
+    stopCursorBlink() {
+        if (this.cursorBlinkInterval) {
+            clearInterval(this.cursorBlinkInterval);
+            this.cursorBlinkInterval = null;
+        }
+        this.cursorVisible = true; // Reset to visible
+    }
+
+    resetCursorBlink() {
+        // Reset cursor to visible and restart blink cycle
+        // Called when user types or moves cursor
+        if (this.cursorBlinkInterval) {
+            this.cursorVisible = true;
+            this.stopCursorBlink();
+            this.startCursorBlink();
+        }
+    }
+
+    openHTMLModal(fieldLabel, initialValue, widget) {
+        // Create HTML modal overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'maya1-modal-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999999;
+            animation: fadeIn 0.2s ease;
+        `;
+
+        // Create modal container
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            background: #1a1a1a;
+            border: 3px solid #667eea;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
+            animation: slideIn 0.3s ease;
+        `;
+
+        // Header container
+        const header = document.createElement('div');
+        header.style.cssText = `
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 2px solid #667eea40;
+        `;
+
+        // Title
+        const title = document.createElement('div');
+        title.textContent = `Edit ${fieldLabel}`;
+        title.style.cssText = `
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+        `;
+
+        // Font size controls container
+        const fontControls = document.createElement('div');
+        fontControls.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        `;
+
+        // Small A
+        const smallA = document.createElement('span');
+        smallA.textContent = 'A';
+        smallA.style.cssText = `
+            color: #aaa;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: default;
+        `;
+
+        // Font size slider
+        const fontSlider = document.createElement('input');
+        fontSlider.type = 'range';
+        fontSlider.min = '12';
+        fontSlider.max = '20';
+        fontSlider.value = this.htmlModalFontSize.toString();
+        fontSlider.style.cssText = `
+            width: 120px;
+            cursor: pointer;
+        `;
+
+        // Large A
+        const largeA = document.createElement('span');
+        largeA.textContent = 'A';
+        largeA.style.cssText = `
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: default;
+        `;
+
+        fontControls.appendChild(smallA);
+        fontControls.appendChild(fontSlider);
+        fontControls.appendChild(largeA);
+
+        header.appendChild(title);
+        header.appendChild(fontControls);
+
+        // Textarea
+        const textarea = document.createElement('textarea');
+        textarea.value = initialValue || '';
+        textarea.style.cssText = `
+            flex: 1;
+            background: #252525;
+            color: #e0e0e0;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            margin: 20px 24px;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: ${this.htmlModalFontSize}px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            min-height: max(250px, 30vh);
+            max-height: 40vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        `;
+        textarea.addEventListener('focus', () => {
+            textarea.style.borderColor = '#7788ff';
+        });
+        textarea.addEventListener('blur', () => {
+            textarea.style.borderColor = '#667eea';
+        });
+
+        // Font slider event listener
+        fontSlider.addEventListener('input', (e) => {
+            const newSize = parseInt(e.target.value);
+            this.htmlModalFontSize = newSize;
+            textarea.style.fontSize = `${newSize}px`;
+        });
+
+        // Ctrl+Enter to save
+        textarea.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (textarea.value.trim() === '') {
+                    this.showErrorNotification('No text to save');
+                    this.closeHTMLModal();
+                } else {
+                    widget.value = textarea.value;
+                    this.showSaveNotification();
+                    this.closeHTMLModal();
+                }
+            }
+        });
+
+        // Emotion tags container
+        const emotionContainer = document.createElement('div');
+        emotionContainer.style.cssText = `
+            padding: 0 24px 16px 24px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        `;
+
+        // Add emotion tag buttons
+        this.emotionTags.forEach(emotion => {
+            const btn = document.createElement('button');
+            btn.textContent = emotion.display;
+            btn.style.cssText = `
+                background: linear-gradient(180deg, ${emotion.color}ee, ${emotion.color}99);
+                border: 2px solid ${emotion.color}dd;
+                border-radius: 6px;
+                color: #fff;
+                font-family: Arial, sans-serif;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 10px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+                box-shadow: 0 0 0 0 ${emotion.color}00;
+            `;
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = `linear-gradient(180deg, ${emotion.color}ff, ${emotion.color}cc)`;
+                btn.style.boxShadow = `0 0 0 1px ${emotion.color}ff`;
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.background = `linear-gradient(180deg, ${emotion.color}ee, ${emotion.color}99)`;
+                btn.style.boxShadow = `0 0 0 0 ${emotion.color}00`;
+            });
+            btn.addEventListener('click', () => {
+                const cursorPos = textarea.selectionStart;
+                const textBefore = textarea.value.substring(0, cursorPos);
+                const textAfter = textarea.value.substring(cursorPos);
+                textarea.value = textBefore + emotion.tag + ' ' + textAfter;
+                textarea.focus();
+                const newPos = cursorPos + emotion.tag.length + 1;
+                textarea.setSelectionRange(newPos, newPos);
+            });
+            emotionContainer.appendChild(btn);
+        });
+
+        // Buttons container
+        const btnContainer = document.createElement('div');
+        btnContainer.style.cssText = `
+            padding: 0 24px 24px 24px;
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        `;
+
+        // Save button with hint inside
+        const saveBtn = document.createElement('button');
+        saveBtn.style.cssText = `
+            background: #3aba6a;
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            padding: 12px 48px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        `;
+
+        const saveLabel = document.createElement('div');
+        saveLabel.textContent = 'Save';
+        saveLabel.style.cssText = `
+            font-size: 16px;
+            font-weight: bold;
+        `;
+
+        const saveHint = document.createElement('div');
+        saveHint.textContent = 'Ctrl + Enter';
+        saveHint.style.cssText = `
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 10px;
+            user-select: none;
+            -webkit-user-select: none;
+        `;
+
+        saveBtn.appendChild(saveLabel);
+        saveBtn.appendChild(saveHint);
+
+        saveBtn.addEventListener('mouseenter', () => saveBtn.style.background = '#4ade80');
+        saveBtn.addEventListener('mouseleave', () => saveBtn.style.background = '#3aba6a');
+        saveBtn.addEventListener('click', () => {
+            if (textarea.value.trim() === '') {
+                this.showErrorNotification('No text to save');
+                this.closeHTMLModal();
+            } else {
+                widget.value = textarea.value;
+                this.showSaveNotification();
+                this.closeHTMLModal();
+            }
+        });
+
+        // Cancel button with hint inside
+        const cancelBtn = document.createElement('button');
+        cancelBtn.style.cssText = `
+            background: #cc4444;
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            padding: 12px 48px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        `;
+
+        const cancelLabel = document.createElement('div');
+        cancelLabel.textContent = 'Cancel';
+        cancelLabel.style.cssText = `
+            font-size: 16px;
+            font-weight: bold;
+        `;
+
+        const cancelHint = document.createElement('div');
+        cancelHint.textContent = 'ESC';
+        cancelHint.style.cssText = `
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 10px;
+            user-select: none;
+            -webkit-user-select: none;
+        `;
+
+        cancelBtn.appendChild(cancelLabel);
+        cancelBtn.appendChild(cancelHint);
+
+        cancelBtn.addEventListener('mouseenter', () => cancelBtn.style.background = '#ff5555');
+        cancelBtn.addEventListener('mouseleave', () => cancelBtn.style.background = '#cc4444');
+        cancelBtn.addEventListener('click', () => this.closeHTMLModal());
+
+        btnContainer.appendChild(saveBtn);
+        btnContainer.appendChild(cancelBtn);
+
+        // Assemble modal
+        modal.appendChild(header);
+        modal.appendChild(textarea);
+        modal.appendChild(emotionContainer);
+        modal.appendChild(btnContainer);
+        overlay.appendChild(modal);
+
+        // Add CSS animations and custom selection color (only once)
+        if (!document.getElementById('maya1-modal-animations')) {
+            const style = document.createElement('style');
+            style.id = 'maya1-modal-animations';
+            style.textContent = `
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes fadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+                @keyframes slideIn {
+                    from { transform: translateY(-30px); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
+                }
+
+                /* Custom selection color to match theme */
+                #maya1-modal-overlay textarea::selection {
+                    background: #667eea80;
+                    color: #ffffff;
+                }
+                #maya1-modal-overlay textarea::-moz-selection {
+                    background: #667eea80;
+                    color: #ffffff;
+                }
+
+                /* Custom scrollbar for textarea */
+                #maya1-modal-overlay textarea::-webkit-scrollbar {
+                    width: 12px;
+                }
+                #maya1-modal-overlay textarea::-webkit-scrollbar-track {
+                    background: rgba(100, 100, 100, 0.2);
+                    border-radius: 6px;
+                }
+                #maya1-modal-overlay textarea::-webkit-scrollbar-thumb {
+                    background: #667eea;
+                    border-radius: 6px;
+                }
+                #maya1-modal-overlay textarea::-webkit-scrollbar-thumb:hover {
+                    background: #7788ff;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // Handle ESC key
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                this.closeHTMLModal();
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+
+        // Click outside to close
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                this.closeHTMLModal();
+            }
+        });
+
+        // Prevent clicks inside modal from closing
+        modal.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Store references
+        this.htmlModalElement = overlay;
+        this.htmlModalEscHandler = escHandler;
+        this.htmlModalOpen = true;
+
+        // Add to DOM and focus textarea
+        document.body.appendChild(overlay);
+        setTimeout(() => textarea.focus(), 100);
+    }
+
+    closeHTMLModal() {
+        if (this.htmlModalElement) {
+            const element = this.htmlModalElement;
+
+            // Prevent any interaction during close
+            element.style.pointerEvents = 'none';
+
+            // Listen for animation end to remove element at exact right time
+            const handleAnimationEnd = () => {
+                if (element.parentNode) {
+                    element.parentNode.removeChild(element);
+                }
+                this.htmlModalElement = null;
+            };
+
+            element.addEventListener('animationend', handleAnimationEnd, { once: true });
+
+            // Start fade out animation
+            element.style.animation = 'fadeOut 0.2s ease forwards';
+
+            // Fallback timeout in case animationend doesn't fire
+            setTimeout(() => {
+                if (element.parentNode) {
+                    element.parentNode.removeChild(element);
+                }
+                this.htmlModalElement = null;
+            }, 250);
+        }
+
+        if (this.htmlModalEscHandler) {
+            document.removeEventListener('keydown', this.htmlModalEscHandler);
+            this.htmlModalEscHandler = null;
+        }
+
+        this.htmlModalOpen = false;
+        this.node.setDirtyCanvas(true, true);
+    }
+
+    showSaveNotification() {
+        // Create toast notification
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: #3aba6a;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 9999999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0;
+            transition: all 0.3s ease;
+        `;
+
+        // Checkmark
+        const checkmark = document.createElement('span');
+        checkmark.textContent = '✓';
+        checkmark.style.cssText = `
+            font-size: 18px;
+            font-weight: bold;
+        `;
+
+        const message = document.createElement('span');
+        message.textContent = 'Text Saved';
+
+        toast.appendChild(checkmark);
+        toast.appendChild(message);
+        document.body.appendChild(toast);
+
+        // Animate in
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+        }, 10);
+
+        // Animate out and remove
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(-50%) translateY(-20px)';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 2000);
+    }
+
+    showErrorNotification(errorMessage) {
+        // Create error toast notification
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: #cc4444;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 9999999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0;
+            transition: all 0.3s ease;
+        `;
+
+        // X mark
+        const xmark = document.createElement('span');
+        xmark.textContent = '✕';
+        xmark.style.cssText = `
+            font-size: 18px;
+            font-weight: bold;
+        `;
+
+        const message = document.createElement('span');
+        message.textContent = errorMessage;
+
+        toast.appendChild(xmark);
+        toast.appendChild(message);
+        document.body.appendChild(toast);
+
+        // Animate in
+        setTimeout(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+        }, 10);
+
+        // Animate out and remove
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(-50%) translateY(-20px)';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 2000);
     }
 
     drawInterface(ctx) {
@@ -231,11 +824,6 @@ class Maya1TTSCanvas {
 
         // Draw tooltip last so it appears on top of everything
         this.drawTooltip(ctx);
-
-        // Draw lightbox on top of everything if open
-        if (this.lightboxOpen) {
-            this.drawLightbox(ctx);
-        }
     }
 
     drawCharacterPresets(ctx, x, y) {
@@ -373,8 +961,8 @@ class Maya1TTSCanvas {
                 lineIdx++;
             }
 
-            // Reset for text drawing
-            textY = y + padding;
+            // Reset for text drawing with scroll offset
+            textY = y + padding - scrollOffset;
             ctx.fillStyle = "#e0e0e0";
         }
 
@@ -384,13 +972,13 @@ class Maya1TTSCanvas {
             textY += 16;
         }
 
-        // Cursor
-        if (isEditing) {
+        // Cursor (only show when visible and no selection)
+        if (isEditing && this.cursorVisible && (this.selectionStart === null || this.selectionEnd === null || this.selectionStart === this.selectionEnd)) {
             // Find which line the cursor is on
             let currentPos = 0;
             let cursorLine = 0;
             let cursorX = x + padding;
-            let cursorY = y + padding;
+            let cursorY = y + padding - scrollOffset;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
@@ -402,7 +990,7 @@ class Maya1TTSCanvas {
                     const posInLine = this.cursorPos - currentPos;
                     const beforeCursor = line.substring(0, posInLine);
                     cursorX = x + padding + ctx.measureText(beforeCursor).width;
-                    cursorY = y + padding + i * 16;
+                    cursorY = y + padding - scrollOffset + i * 16;
                     break;
                 }
 
@@ -624,11 +1212,36 @@ class Maya1TTSCanvas {
         ctx.font = "bold 13px Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
+
+        // Draw selection highlight for centered text (before drawing text)
+        if (isEditing && this.selectionStart !== null && this.selectionEnd !== null && this.selectionStart !== this.selectionEnd) {
+            const start = Math.min(this.selectionStart, this.selectionEnd);
+            const end = Math.max(this.selectionStart, this.selectionEnd);
+
+            const textWidth = ctx.measureText(value).width;
+            const textStartX = x + width / 2 - textWidth / 2;
+
+            const beforeSel = value.substring(0, start);
+            const selected = value.substring(start, end);
+
+            const selX = textStartX + ctx.measureText(beforeSel).width;
+            const selWidth = ctx.measureText(selected).width;
+
+            ctx.fillStyle = "#667eea80"; // Semi-transparent blue
+            ctx.fillRect(selX, y + height - 20, selWidth, 14);
+
+            // Reset text color
+            ctx.fillStyle = isEditing ? "#fff" : "#6ee7b7";
+        }
+
         ctx.fillText(value, x + width / 2, y + height - 6);
 
-        // Cursor
-        if (isEditing) {
-            const cursorX = x + width / 2 + ctx.measureText(value.substring(0, this.cursorPos)).width / 2;
+        // Cursor (only show when visible and no selection)
+        if (isEditing && this.cursorVisible && (this.selectionStart === null || this.selectionEnd === null || this.selectionStart === this.selectionEnd)) {
+            // Calculate cursor position for centered text
+            const textWidth = ctx.measureText(value).width;
+            const textStartX = x + width / 2 - textWidth / 2;
+            const cursorX = textStartX + ctx.measureText(value.substring(0, this.cursorPos)).width;
             ctx.fillStyle = "#667eea";
             ctx.fillRect(cursorX, y + height - 20, 2, 14);
         }
@@ -811,86 +1424,12 @@ class Maya1TTSCanvas {
         const relX = e.canvasX - node.pos[0];
         const relY = e.canvasY - node.pos[1];
 
-        // Handle lightbox interactions first
-        if (this.lightboxOpen) {
-            for (const key in this.controls) {
-                const ctrl = this.controls[key];
-                if (this.isPointInControl(relX, relY, ctrl)) {
-                    if (key === 'lightboxSaveBtn') {
-                        // Trigger click animation
-                        this.clickedButtons[key] = true;
-                        setTimeout(() => {
-                            delete this.clickedButtons[key];
-                            this.closeLightbox(true);
-                        }, 150);
-                        node.setDirtyCanvas(true, true);
-                        return true;
-                    } else if (key === 'lightboxCancelBtn') {
-                        // Trigger click animation
-                        this.clickedButtons[key] = true;
-                        setTimeout(() => {
-                            delete this.clickedButtons[key];
-                            this.closeLightbox(false);
-                        }, 150);
-                        node.setDirtyCanvas(true, true);
-                        return true;
-                    } else if (key.startsWith('lightboxEmotion')) {
-                        // Trigger click animation
-                        this.clickedButtons[key] = true;
-                        setTimeout(() => {
-                            delete this.clickedButtons[key];
-                            node.setDirtyCanvas(true, true);
-                        }, 150);
-
-                        // Insert emotion tag at cursor
-                        const tagWithSpace = ctrl.emotion.tag + " ";
-                        this.editingValue = this.editingValue.slice(0, this.cursorPos) + tagWithSpace + this.editingValue.slice(this.cursorPos);
-                        this.cursorPos += tagWithSpace.length;
-                        node.setDirtyCanvas(true, true);
-                        return true;
-                    } else if (key === 'lightboxTextField') {
-                        // Handle text field click for cursor positioning and drag selection
-                        const scrollOffset = this.lightboxScrollOffset;
-                        const clickX = relX - ctrl.textX;
-                        const clickY = relY - ctrl.textY + scrollOffset;
-
-                        const cursorPos = this.calculateCursorPosition(clickX, clickY, this.editingValue, 560);
-
-                        this.isDragging = true;
-                        this.dragStartPos = cursorPos;
-                        this.cursorPos = cursorPos;
-                        this.selectionStart = cursorPos;
-                        this.selectionEnd = cursorPos;
-
-                        // Add document-level mouseup listener
-                        if (!this.mouseUpHandler) {
-                            this.mouseUpHandler = () => {
-                                this.isDragging = false;
-                                this.dragStartPos = null;
-                                if (this.mouseUpHandler) {
-                                    document.removeEventListener('mouseup', this.mouseUpHandler, true);
-                                    this.mouseUpHandler = null;
-                                }
-                                node.setDirtyCanvas(true, true);
-                            };
-                            document.addEventListener('mouseup', this.mouseUpHandler, true);
-                        }
-
-                        node.setDirtyCanvas(true, true);
-                        return true;
-                    }
-                }
-            }
-            // Click outside lightbox modal - do nothing (keep lightbox open)
-            return true;
-        }
-
         for (const key in this.controls) {
             const ctrl = this.controls[key];
             if (this.isPointInControl(relX, relY, ctrl)) {
                 // Check ExpandBtn BEFORE general Btn to prevent it being caught by Btn handler
                 if (key.endsWith('ExpandBtn')) {
-                    // Open lightbox for this field
+                    // Open HTML modal for this field
                     const fieldLabel = ctrl.label;
                     const fieldCtrl = this.controls[`${fieldLabel}Field`];
                     if (fieldCtrl && fieldCtrl.widget) {
@@ -899,23 +1438,9 @@ class Maya1TTSCanvas {
                             this.stopEditing(true);
                         }
 
-                        // Open lightbox
-                        this.lightboxOpen = true;
-                        this.lightboxField = fieldLabel;
-                        this.editingValue = String(fieldCtrl.widget.value || "");
-                        this.cursorPos = this.editingValue.length;
-                        this.selectionStart = null;
-                        this.selectionEnd = null;
-                        this.lightboxScrollOffset = 0;
-
-                        // Attach keyboard handlers
-                        this.keydownHandler = (e) => this.handleKeyDown(e);
-                        document.addEventListener('keydown', this.keydownHandler, true);
-
-                        this.wheelHandler = (e) => this.handleLightboxWheel(e);
-                        document.addEventListener('wheel', this.wheelHandler, { passive: false, capture: true });
-
-                        node.setDirtyCanvas(true, true);
+                        // Open HTML modal
+                        const initialValue = String(fieldCtrl.widget.value || "");
+                        this.openHTMLModal(fieldLabel, initialValue, fieldCtrl.widget);
                     }
                     return true;
                 } else if (key.endsWith('Btn')) {
@@ -950,11 +1475,24 @@ class Maya1TTSCanvas {
                 } else if (key.endsWith('Field')) {
                     // If already editing this field, start drag selection
                     if (this.editingField === ctrl.label) {
-                        const scrollOffset = this.scrollOffsets[ctrl.label] || 0;
-                        const clickX = relX - ctrl.textX;
-                        const clickY = relY - ctrl.textY + scrollOffset;
+                        let cursorPos;
 
-                        const cursorPos = this.calculateCursorPosition(clickX, clickY, this.editingValue, ctrl.w - 16);
+                        if (ctrl.isNumber) {
+                            // Number fields use centered text
+                            cursorPos = this.calculateCursorPositionCentered(
+                                relX,
+                                this.editingValue,
+                                ctrl.x,
+                                ctrl.w
+                            );
+                        } else {
+                            // Text fields use left-aligned text
+                            const scrollOffset = this.scrollOffsets[ctrl.label] || 0;
+                            const clickX = Math.max(0, relX - ctrl.textX); // Clamp to 0 to handle padding area
+                            const clickY = Math.max(0, relY - ctrl.textY + scrollOffset); // Clamp to 0
+
+                            cursorPos = this.calculateCursorPosition(clickX, clickY, this.editingValue, ctrl.w - 16);
+                        }
 
                         this.isDragging = true;
                         this.dragStartPos = cursorPos;
@@ -984,12 +1522,25 @@ class Maya1TTSCanvas {
                     const initialValue = String(ctrl.widget?.value || "");
 
                     // Calculate cursor position from click BEFORE starting editing
-                    const cursorPos = this.calculateCursorPosition(
-                        relX - ctrl.textX,
-                        relY - ctrl.textY,
-                        initialValue,
-                        ctrl.w - 16
-                    );
+                    let cursorPos;
+
+                    if (ctrl.isNumber) {
+                        // Number fields use centered text - calculate differently
+                        cursorPos = this.calculateCursorPositionCentered(
+                            relX,
+                            initialValue,
+                            ctrl.x,
+                            ctrl.w
+                        );
+                    } else {
+                        // Text fields use left-aligned text
+                        cursorPos = this.calculateCursorPosition(
+                            Math.max(0, relX - ctrl.textX), // Clamp to 0 to handle padding area
+                            Math.max(0, relY - ctrl.textY), // Clamp to 0
+                            initialValue,
+                            ctrl.w - 16
+                        );
+                    }
 
                     // Start editing with calculated cursor position
                     this.startEditing(ctrl.label, initialValue, ctrl);
@@ -1034,38 +1585,44 @@ class Maya1TTSCanvas {
     }
 
     handleKeyDown(e) {
-        if (!this.editingField && !this.lightboxOpen) return;
-
-        // CRITICAL: Prevent ALL default behavior and stop propagation
-        // This prevents ComfyUI shortcuts from being triggered
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
+        // Only handle keyboard if we're editing a field (not in HTML modal)
+        if (!this.editingField || this.htmlModalOpen) return;
 
         // Handle Ctrl/Cmd shortcuts
         const isCtrl = e.ctrlKey || e.metaKey;
 
         if (isCtrl && e.key === 'a') {
-            // Select all
+            // Select all - prevent default to stop browser selection
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
             this.selectionStart = 0;
             this.selectionEnd = this.editingValue.length;
             this.cursorPos = this.editingValue.length;
+            this.cursorVisible = true; // Make cursor visible
             this.node.setDirtyCanvas(true, true);
             return;
         } else if (isCtrl && e.key === 'c') {
-            // Copy
-            if (this.selectionStart !== null && this.selectionEnd !== null) {
+            // Copy - allow default but also handle manually
+            if (this.selectionStart !== null && this.selectionEnd !== null && this.selectionStart !== this.selectionEnd) {
                 const selectedText = this.editingValue.substring(
                     Math.min(this.selectionStart, this.selectionEnd),
                     Math.max(this.selectionStart, this.selectionEnd)
                 );
-                navigator.clipboard.writeText(selectedText);
+                navigator.clipboard.writeText(selectedText).catch(err => console.error('Copy failed:', err));
             }
             return;
         } else if (isCtrl && e.key === 'v') {
             // Paste
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
             navigator.clipboard.readText().then(text => {
-                if (this.selectionStart !== null && this.selectionEnd !== null) {
+                if (!this.editingField) return; // Safety check
+
+                if (this.selectionStart !== null && this.selectionEnd !== null && this.selectionStart !== this.selectionEnd) {
                     // Replace selection
                     const start = Math.min(this.selectionStart, this.selectionEnd);
                     const end = Math.max(this.selectionStart, this.selectionEnd);
@@ -1078,24 +1635,35 @@ class Maya1TTSCanvas {
                     this.editingValue = this.editingValue.slice(0, this.cursorPos) + text + this.editingValue.slice(this.cursorPos);
                     this.cursorPos += text.length;
                 }
+                this.resetCursorBlink();
                 this.node.setDirtyCanvas(true, true);
-            });
+            }).catch(err => console.error('Paste failed:', err));
             return;
         } else if (isCtrl && e.key === 'x') {
             // Cut
-            if (this.selectionStart !== null && this.selectionEnd !== null) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            if (this.selectionStart !== null && this.selectionEnd !== null && this.selectionStart !== this.selectionEnd) {
                 const start = Math.min(this.selectionStart, this.selectionEnd);
                 const end = Math.max(this.selectionStart, this.selectionEnd);
                 const selectedText = this.editingValue.substring(start, end);
-                navigator.clipboard.writeText(selectedText);
+                navigator.clipboard.writeText(selectedText).catch(err => console.error('Cut failed:', err));
                 this.editingValue = this.editingValue.substring(0, start) + this.editingValue.substring(end);
                 this.cursorPos = start;
                 this.selectionStart = null;
                 this.selectionEnd = null;
+                this.resetCursorBlink();
                 this.node.setDirtyCanvas(true, true);
             }
             return;
         }
+
+        // For all other keys, prevent default to stop ComfyUI shortcuts
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
 
         // Handle selection deletion for Backspace and Delete
         if ((e.key === "Backspace" || e.key === "Delete") &&
@@ -1107,6 +1675,7 @@ class Maya1TTSCanvas {
             this.cursorPos = start;
             this.selectionStart = null;
             this.selectionEnd = null;
+            this.resetCursorBlink();
             this.node.setDirtyCanvas(true, true);
             return;
         }
@@ -1130,10 +1699,7 @@ class Maya1TTSCanvas {
         }
 
         if (e.key === "Enter") {
-            if (this.lightboxOpen) {
-                // In lightbox, Enter saves and closes
-                this.closeLightbox(true);
-            } else if (isCtrl) {
+            if (isCtrl) {
                 // Ctrl+Enter saves for all fields
                 this.stopEditing(true);
             } else if (this.editingField === "Text" || this.editingField === "Voice Description") {
@@ -1150,6 +1716,7 @@ class Maya1TTSCanvas {
                 // Insert newline
                 this.editingValue = this.editingValue.slice(0, this.cursorPos) + "\n" + this.editingValue.slice(this.cursorPos);
                 this.cursorPos++;
+                this.resetCursorBlink();
                 this.node.setDirtyCanvas(true, true);
             } else {
                 // For number fields, Enter saves
@@ -1157,44 +1724,47 @@ class Maya1TTSCanvas {
             }
             return;
         } else if (e.key === "Escape") {
-            // Cancel editing (or close lightbox)
-            if (this.lightboxOpen) {
-                this.closeLightbox(false);
-            } else {
-                this.stopEditing(false);
-            }
+            // Cancel editing
+            this.stopEditing(false);
             return;
         } else if (e.key === "Backspace") {
             if (this.cursorPos > 0) {
                 this.editingValue = this.editingValue.slice(0, this.cursorPos - 1) + this.editingValue.slice(this.cursorPos);
                 this.cursorPos--;
+                this.resetCursorBlink();
                 this.node.setDirtyCanvas(true, true);
             }
         } else if (e.key === "Delete") {
             if (this.cursorPos < this.editingValue.length) {
                 this.editingValue = this.editingValue.slice(0, this.cursorPos) + this.editingValue.slice(this.cursorPos + 1);
+                this.resetCursorBlink();
                 this.node.setDirtyCanvas(true, true);
             }
         } else if (e.key === "ArrowLeft") {
             if (this.cursorPos > 0) {
                 this.cursorPos--;
+                this.resetCursorBlink();
                 this.node.setDirtyCanvas(true, true);
             }
         } else if (e.key === "ArrowRight") {
             if (this.cursorPos < this.editingValue.length) {
                 this.cursorPos++;
+                this.resetCursorBlink();
                 this.node.setDirtyCanvas(true, true);
             }
         } else if (e.key === "Home") {
             this.cursorPos = 0;
+            this.resetCursorBlink();
             this.node.setDirtyCanvas(true, true);
         } else if (e.key === "End") {
             this.cursorPos = this.editingValue.length;
+            this.resetCursorBlink();
             this.node.setDirtyCanvas(true, true);
         } else if (e.key.length === 1 && !isCtrl) {
             // Only handle printable characters (not Ctrl+C, etc.)
             this.editingValue = this.editingValue.slice(0, this.cursorPos) + e.key + this.editingValue.slice(this.cursorPos);
             this.cursorPos++;
+            this.resetCursorBlink();
             this.node.setDirtyCanvas(true, true);
         }
     }
@@ -1266,6 +1836,9 @@ class Maya1TTSCanvas {
 
     drawTooltip(ctx) {
         if (!this.hoverElement) return;
+
+        // Don't show tooltips when lightbox is open
+        if (this.lightboxOpen) return;
 
         // Don't show tooltips for headers, emotion tag buttons, or character preset buttons
         if (this.hoverElement === 'emotionHeader' ||
@@ -1345,14 +1918,13 @@ class Maya1TTSCanvas {
         ctx.restore();
     }
 
-    calculateCursorPosition(clickX, clickY, text, maxWidth) {
+    calculateCursorPosition(clickX, clickY, text, maxWidth, lineHeight = 16, font = "12px 'Courier New', monospace") {
         // Create a temporary canvas to measure with the correct font
         const tempCanvas = document.createElement('canvas');
         const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.font = "12px 'Courier New', monospace";
+        tempCtx.font = font;
 
         // Wrap text into lines
-        const lineHeight = 16;
         const lineIndex = Math.floor(clickY / lineHeight);
 
         // Split text into lines using same logic as rendering
@@ -1373,12 +1945,19 @@ class Maya1TTSCanvas {
             let charPosInLine = 0;
             let totalWidth = 0;
 
+            // Handle clicks before text starts (negative or very small clickX)
+            if (clickX < 0) {
+                return charsBeforeLine; // Position at start of line
+            }
+
             for (let i = 0; i <= line.length; i++) {
-                if (i === line.length || totalWidth + tempCtx.measureText(line[i]).width / 2 > clickX) {
+                const charWidth = i < line.length ? tempCtx.measureText(line[i]).width : 0;
+                // Click is between this character and the next if clickX is within the character's width
+                if (i === line.length || totalWidth + charWidth / 2 > clickX) {
                     charPosInLine = i;
                     break;
                 }
-                totalWidth += tempCtx.measureText(line[i]).width;
+                totalWidth += charWidth;
             }
 
             return Math.min(charsBeforeLine + charPosInLine, text.length);
@@ -1388,32 +1967,36 @@ class Maya1TTSCanvas {
         }
     }
 
+    calculateCursorPositionCentered(clickX, text, fieldX, fieldWidth) {
+        // For centered single-line text (used in number fields)
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.font = "bold 13px Arial"; // Same font as number fields
+
+        const textWidth = tempCtx.measureText(text).width;
+        const textStartX = fieldX + fieldWidth / 2 - textWidth / 2;
+
+        // Click is relative to text start
+        const relativeX = clickX - textStartX;
+
+        // Find which character was clicked
+        let accumulatedWidth = 0;
+        for (let i = 0; i <= text.length; i++) {
+            if (i === text.length || accumulatedWidth + tempCtx.measureText(text[i]).width / 2 > relativeX) {
+                return i;
+            }
+            accumulatedWidth += tempCtx.measureText(text[i]).width;
+        }
+
+        return text.length;
+    }
+
     handleMouseDrag(e, pos, canvas) {
         if (!this.isDragging) return false;
 
         const node = this.node;
         const relX = e.canvasX - node.pos[0];
         const relY = e.canvasY - node.pos[1];
-
-        // Handle lightbox drag selection
-        if (this.lightboxOpen) {
-            const ctrl = this.controls['lightboxTextField'];
-            if (ctrl) {
-                const scrollOffset = this.lightboxScrollOffset;
-                const clickX = relX - ctrl.textX;
-                const clickY = relY - ctrl.textY + scrollOffset;
-
-                const cursorPos = this.calculateCursorPosition(clickX, clickY, this.editingValue, 560);
-
-                // Update selection
-                this.cursorPos = cursorPos;
-                this.selectionStart = this.dragStartPos;
-                this.selectionEnd = cursorPos;
-
-                node.setDirtyCanvas(true, true);
-            }
-            return true;
-        }
 
         // Handle regular field drag selection
         if (!this.editingField) return false;
@@ -1426,11 +2009,24 @@ class Maya1TTSCanvas {
         if (relX >= ctrl.x && relX <= ctrl.x + ctrl.w &&
             relY >= ctrl.y && relY <= ctrl.y + ctrl.h) {
 
-            const scrollOffset = this.scrollOffsets[this.editingField] || 0;
-            const clickX = relX - ctrl.textX;
-            const clickY = relY - ctrl.textY + scrollOffset;
+            let cursorPos;
 
-            const cursorPos = this.calculateCursorPosition(clickX, clickY, this.editingValue, ctrl.w - 16);
+            if (ctrl.isNumber) {
+                // Number fields use centered text
+                cursorPos = this.calculateCursorPositionCentered(
+                    relX,
+                    this.editingValue,
+                    ctrl.x,
+                    ctrl.w
+                );
+            } else {
+                // Text fields use left-aligned text
+                const scrollOffset = this.scrollOffsets[this.editingField] || 0;
+                const clickX = Math.max(0, relX - ctrl.textX); // Clamp to 0 to handle padding area
+                const clickY = Math.max(0, relY - ctrl.textY + scrollOffset); // Clamp to 0
+
+                cursorPos = this.calculateCursorPosition(clickX, clickY, this.editingValue, ctrl.w - 16);
+            }
 
             // Update selection
             this.cursorPos = cursorPos;
@@ -1493,319 +2089,6 @@ class Maya1TTSCanvas {
 
             return false;
         }
-    }
-
-    handleLightboxWheel(e) {
-        if (!this.lightboxOpen) return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-
-        // Calculate total content height
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.font = "14px 'Courier New', monospace";
-        const lines = this.wrapText(tempCtx, this.editingValue, 560);
-        const totalHeight = lines.length * 18;
-        const visibleHeight = 400;
-
-        // Only scroll if content is larger than visible area
-        if (totalHeight > visibleHeight) {
-            const scrollAmount = e.deltaY;
-            const maxScroll = totalHeight - visibleHeight;
-
-            this.lightboxScrollOffset = Math.max(0, Math.min(maxScroll, this.lightboxScrollOffset + scrollAmount));
-
-            this.node.setDirtyCanvas(true, true);
-        }
-    }
-
-    closeLightbox(save = true) {
-        if (!this.lightboxOpen) return;
-
-        // Save the value if requested
-        if (save && this.lightboxField) {
-            const fieldCtrl = this.controls[`${this.lightboxField}Field`];
-            if (fieldCtrl && fieldCtrl.widget) {
-                fieldCtrl.widget.value = this.editingValue;
-            }
-        }
-
-        // Remove event handlers
-        if (this.keydownHandler) {
-            document.removeEventListener('keydown', this.keydownHandler, true);
-            this.keydownHandler = null;
-        }
-
-        if (this.wheelHandler) {
-            document.removeEventListener('wheel', this.wheelHandler, { passive: false, capture: true });
-            this.wheelHandler = null;
-        }
-
-        if (this.mouseUpHandler) {
-            document.removeEventListener('mouseup', this.mouseUpHandler, true);
-            this.mouseUpHandler = null;
-        }
-
-        this.lightboxOpen = false;
-        this.lightboxField = null;
-        this.editingValue = "";
-        this.cursorPos = 0;
-        this.selectionStart = null;
-        this.selectionEnd = null;
-        this.isDragging = false;
-        this.dragStartPos = null;
-        this.lightboxScrollOffset = 0;
-
-        this.node.setDirtyCanvas(true, true);
-    }
-
-    drawLightbox(ctx) {
-        // Draw dark overlay
-        ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
-        ctx.fillRect(0, 0, this.node.size[0], this.node.size[1]);
-
-        // Modal dimensions - increased height to fit all content with proper margin
-        const modalWidth = 600;
-        const modalHeight = 730;
-        const modalX = (this.node.size[0] - modalWidth) / 2;
-        const modalY = 40;
-
-        // Modal background
-        ctx.fillStyle = "#1a1a1a";
-        ctx.strokeStyle = "#667eea";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.roundRect(modalX, modalY, modalWidth, modalHeight, 10);
-        ctx.fill();
-        ctx.stroke();
-
-        // Title
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 16px Arial";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillText(`Edit ${this.lightboxField}`, modalX + 20, modalY + 18);
-
-        // Text field
-        const textX = modalX + 20;
-        const textY = modalY + 60;
-        const textWidth = modalWidth - 40;
-        const textHeight = 420;
-
-        ctx.fillStyle = "#252525";
-        ctx.strokeStyle = "#667eea";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(textX, textY, textWidth, textHeight, 5);
-        ctx.fill();
-        ctx.stroke();
-
-        // Draw text content with scroll
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(textX, textY, textWidth, textHeight);
-        ctx.clip();
-
-        const padding = 10;
-        const maxWidth = textWidth - padding * 2;
-        ctx.font = "14px 'Courier New', monospace";
-        const lines = this.wrapText(ctx, this.editingValue, maxWidth);
-
-        let textDrawY = textY + padding - this.lightboxScrollOffset;
-
-        // Draw selection highlight
-        if (this.selectionStart !== null && this.selectionEnd !== null) {
-            const start = Math.min(this.selectionStart, this.selectionEnd);
-            const end = Math.max(this.selectionStart, this.selectionEnd);
-
-            let currentPos = 0;
-            for (const line of lines) {
-                const lineStart = currentPos;
-                const lineEnd = currentPos + line.length;
-
-                if (end > lineStart && start < lineEnd) {
-                    const selStart = Math.max(0, start - lineStart);
-                    const selEnd = Math.min(line.length, end - lineStart);
-
-                    const beforeSel = line.substring(0, selStart);
-                    const selected = line.substring(selStart, selEnd);
-
-                    const selX = textX + padding + ctx.measureText(beforeSel).width;
-                    const selWidth = ctx.measureText(selected).width;
-
-                    ctx.fillStyle = "#667eea80";
-                    ctx.fillRect(selX, textDrawY, selWidth, 18);
-                }
-
-                currentPos += line.length + 1;
-                textDrawY += 18;
-            }
-
-            textDrawY = textY + padding - this.lightboxScrollOffset;
-            ctx.fillStyle = "#e0e0e0";
-        }
-
-        // Draw text
-        ctx.fillStyle = "#e0e0e0";
-        for (const line of lines) {
-            ctx.fillText(line, textX + padding, textDrawY);
-            textDrawY += 18;
-        }
-
-        // Draw cursor
-        let currentPos = 0;
-        let cursorDrawn = false;
-        textDrawY = textY + padding - this.lightboxScrollOffset;
-
-        for (const line of lines) {
-            const lineEnd = currentPos + line.length;
-
-            if (this.cursorPos <= lineEnd && !cursorDrawn) {
-                const posInLine = this.cursorPos - currentPos;
-                const beforeCursor = line.substring(0, posInLine);
-                const cursorX = textX + padding + ctx.measureText(beforeCursor).width;
-
-                ctx.fillStyle = "#667eea";
-                ctx.fillRect(cursorX, textDrawY, 2, 18);
-                cursorDrawn = true;
-                break;
-            }
-
-            currentPos += line.length + 1;
-            textDrawY += 18;
-        }
-
-        ctx.restore();
-
-        // Draw scrollbar if needed
-        if (lines.length * 18 > textHeight - 20) {
-            const totalHeight = lines.length * 18;
-            const visibleHeight = textHeight - 20;
-            const scrollbarHeight = Math.max(30, (visibleHeight / totalHeight) * visibleHeight);
-            const scrollbarY = textY + 10 + (this.lightboxScrollOffset / (totalHeight - visibleHeight)) * (visibleHeight - scrollbarHeight);
-
-            ctx.fillStyle = "rgba(100, 100, 100, 0.3)";
-            ctx.fillRect(textX + textWidth - 8, textY + 10, 6, visibleHeight);
-
-            ctx.fillStyle = "#667eea";
-            ctx.fillRect(textX + textWidth - 8, scrollbarY, 6, scrollbarHeight);
-        }
-
-        // Store text field bounds for click detection
-        this.controls['lightboxTextField'] = { x: textX, y: textY, w: textWidth, h: textHeight, textX: textX + padding, textY: textY + padding };
-
-        // Emotion tags
-        const emotionY = textY + textHeight + 20;
-        const buttonWidth = (textWidth - 9) / 4;
-        const buttonHeight = 28;
-        const btnPadding = 3;
-
-        let row = 0;
-        let col = 0;
-
-        for (let i = 0; i < this.emotionTags.length; i++) {
-            const emotion = this.emotionTags[i];
-            const btnX = textX + col * (buttonWidth + btnPadding);
-            const btnY = emotionY + row * (buttonHeight + btnPadding);
-            const isHover = this.hoverElement === `lightboxEmotion${i}Btn`;
-            const isClicked = this.clickedButtons[`lightboxEmotion${i}Btn`];
-
-            const gradient = ctx.createLinearGradient(btnX, btnY, btnX, btnY + buttonHeight);
-            if (isClicked) {
-                // Darker when clicked
-                gradient.addColorStop(0, emotion.color + "99");
-                gradient.addColorStop(0.5, emotion.color + "77");
-                gradient.addColorStop(1, emotion.color + "55");
-            } else if (isHover) {
-                gradient.addColorStop(0, emotion.color + "ff");
-                gradient.addColorStop(0.5, emotion.color + "cc");
-                gradient.addColorStop(1, emotion.color + "99");
-            } else {
-                gradient.addColorStop(0, emotion.color + "ee");
-                gradient.addColorStop(0.5, emotion.color + "cc");
-                gradient.addColorStop(1, emotion.color + "99");
-            }
-            ctx.fillStyle = gradient;
-
-            ctx.beginPath();
-            ctx.roundRect(btnX, btnY, buttonWidth, buttonHeight, 5);
-            ctx.fill();
-
-            ctx.strokeStyle = isHover ? emotion.color + "ff" : emotion.color + "dd";
-            ctx.lineWidth = isHover ? 2 : 1.5;
-            ctx.stroke();
-
-            ctx.fillStyle = "#ffffff";
-            ctx.font = "bold 10px Arial";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(emotion.display, btnX + buttonWidth / 2, btnY + buttonHeight / 2);
-
-            this.controls[`lightboxEmotion${i}Btn`] = { x: btnX, y: btnY, w: buttonWidth, h: buttonHeight, emotion };
-
-            col++;
-            if (col >= 4) {
-                col = 0;
-                row++;
-            }
-        }
-
-        // Save and Cancel buttons
-        const buttonY = emotionY + (row + 1) * (buttonHeight + btnPadding) + 10;
-        const btnWidth = 120;
-        const btnHeight = 40;
-        const btnSpacing = 20;
-
-        // Save button
-        const saveBtnX = modalX + (modalWidth - btnWidth * 2 - btnSpacing) / 2;
-        const saveBtnHover = this.hoverElement === 'lightboxSaveBtn';
-        const saveBtnClicked = this.clickedButtons['lightboxSaveBtn'];
-
-        // Darker when clicked
-        if (saveBtnClicked) {
-            ctx.fillStyle = "#2a8a5a";
-        } else if (saveBtnHover) {
-            ctx.fillStyle = "#4ade80";
-        } else {
-            ctx.fillStyle = "#3aba6a";
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(saveBtnX, buttonY, btnWidth, btnHeight, 5);
-        ctx.fill();
-
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 14px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("Save", saveBtnX + btnWidth / 2, buttonY + btnHeight / 2);
-
-        this.controls['lightboxSaveBtn'] = { x: saveBtnX, y: buttonY, w: btnWidth, h: btnHeight };
-
-        // Cancel button
-        const cancelBtnX = saveBtnX + btnWidth + btnSpacing;
-        const cancelBtnHover = this.hoverElement === 'lightboxCancelBtn';
-        const cancelBtnClicked = this.clickedButtons['lightboxCancelBtn'];
-
-        // Darker when clicked
-        if (cancelBtnClicked) {
-            ctx.fillStyle = "#aa2222";
-        } else if (cancelBtnHover) {
-            ctx.fillStyle = "#ff5555";
-        } else {
-            ctx.fillStyle = "#cc4444";
-        }
-
-        ctx.beginPath();
-        ctx.roundRect(cancelBtnX, buttonY, btnWidth, btnHeight, 5);
-        ctx.fill();
-
-        ctx.fillStyle = "#fff";
-        ctx.fillText("Cancel", cancelBtnX + btnWidth / 2, buttonY + btnHeight / 2);
-
-        this.controls['lightboxCancelBtn'] = { x: cancelBtnX, y: buttonY, w: btnWidth, h: btnHeight };
     }
 }
 

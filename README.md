@@ -20,8 +20,7 @@ https://github.com/user-attachments/assets/1be0c2a0-22fb-4890-9147-d20abeb2e067
 - 😊 **16 Emotion Tags**: laugh, cry, whisper, angry, sigh, gasp, scream, and more
 - ⚡ **Real-time Generation** with SNAC neural codec (24kHz audio)
 - 🔧 **Multiple Attention Mechanisms**: SDPA, Flash Attention 2, Sage Attention
-- 💾 **Quantization Support**: 4-bit and 8-bit for memory-constrained GPUs
-- 📦 **GGUF Model Support**: Lightweight quantized models (just `pip install gguf` - no compilation!)
+- 💾 **Quantization Support**: 4-bit and 8-bit for memory-constrained GPUs (bitsandbytes)
 - 🛑 **Native ComfyUI Cancel**: Stop generation anytime
 - 📊 **Progress Tracking**: Real-time token generation speed (it/s)
 - 🔄 **Model Caching**: Fast subsequent generations
@@ -31,12 +30,15 @@ https://github.com/user-attachments/assets/1be0c2a0-22fb-4890-9147-d20abeb2e067
 - 🎨 **Beautiful Dark Theme** with purple accents and smooth animations
 - 👤 **5 Character Presets**: Quick-load voice templates (Male US, Female UK, Announcer, Robot, Demon)
 - 🎭 **16 Visual Emotion Buttons**: One-click emotion tag insertion at cursor position
-- ⛶ **Lightbox Modal Editor**: Fullscreen text editor for longform content
-- ⌨️ **Advanced Keyboard Shortcuts**: Multiline editing with Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Enter
+- ⛶ **HTML Modal Editor**: Fullscreen text editor with native textarea for longform content
+- 🔤 **Font Size Controls**: Adjustable 12-20px font size with visual slider
+- ⌨️ **Keyboard Shortcuts**:Ctrl+Enter to save, ESC to cancel
+- 🔔 **Toast Notifications**: Visual feedback for save success and validation errors
 - 📝 **Inline Text Editing**: Click-to-edit with cursor positioning and drag-to-select
-- 🖱️ **Scroll Support**: Mouse wheel scrolling in text fields
+- 📱 **Responsive Design**: Modal adapts to most screen sizes
 - 💡 **Contextual Tooltips**: Helpful hints on every control
 - 🎬 **Collapsible Sections**: Clean, organized interface
+- 🔄 **Smart Audio Processing**: Auto-chunking for long text with crossfade blending for seamless output
 
 ---
 
@@ -78,8 +80,8 @@ pip install bitsandbytes>=0.41.0
 ```
 
 **Memory savings:**
-- 4-bit: ~6GB → ~3GB VRAM (slight quality loss)
-- 8-bit: ~6GB → ~4GB VRAM (minimal quality loss)
+- 4-bit BNB: ~6GB → ~3GB VRAM (quality loss)
+- 8-bit BNB: ~6GB → ~4GB VRAM (slight quality loss)
 
 ### Accelerated Attention
 
@@ -189,7 +191,7 @@ Restart ComfyUI to load the new nodes. The node will appear under:
 
 ### Node: Maya1 TTS (AIO)
 
-All-in-one node for loading models and generating speech with a beautiful custom canvas UI.
+All-in-one node for loading models and generating speech with custom canvas UI.
 
 <img width="615" height="1121" alt="Screenshot 2025-11-07 084153" src="https://github.com/user-attachments/assets/19105cc2-030a-40e3-b4d9-e18bd6d50b65" />
 
@@ -214,20 +216,28 @@ The node features a completely custom-built interface with:
 - Tags insert where you're typing, not just at the end
 - Click header to collapse/expand section
 
-**⛶ Lightbox Modal** (Bottom right of Text field)
-- Click the expand button for fullscreen text editing
-- Large text area perfect for longform content
-- All emotion buttons available inside modal
-- Mouse wheel scrolling with visual scrollbar
-- **Enter** to save and close, **Escape** to cancel
+**⛶ Professional HTML Modal** (Bottom right of Text field)
+- Click the expand button (⛶) for fullscreen text editing
+- Native HTML textarea with proper newline and whitespace support
+- **Font Size Slider**: Adjust text size from 12px to 20px with visual A/A controls
+- All 16 emotion buttons available inside modal for quick tag insertion
+- **Custom Themed Scrollbar**: Purple accents matching the node design
+- **Toast Notifications**: Green checkmark for "Text Saved", red X for validation errors
+- **Empty Text Validation**: Prevents saving blank text with helpful error message
+- **Keyboard Shortcuts**:
+  - **Ctrl+Enter**: Save and close
+  - **ESC**: Cancel without saving
+  - Full text selection and clipboard support (Ctrl+A, C, V, X)
+- **Responsive Design**: Modal adapts to small and large screens, buttons always visible
+- **Visual Hints**: Subtle grey text under buttons showing keyboard shortcuts
 
-**Keyboard Shortcuts**
-- `Enter`: New line (in text fields)
-- `Ctrl+Enter`: Save changes
-- `Escape`: Cancel editing
+**Keyboard Shortcuts** (Inline Editing & Modal)
+- `Enter`: New line (in multiline text fields)
+- `Ctrl+Enter`: Save and apply changes
+- `Escape`: Cancel editing without saving
 - `Ctrl+A`: Select all text
-- `Ctrl+C/V/X`: Copy, paste, cut
-- Click outside field: Auto-save
+- `Ctrl+C/V/X`: Copy, paste, cut selected text
+- Click outside field: Auto-save (inline editing only)
 
 <details>
 <summary><b>Model Settings</b></summary>

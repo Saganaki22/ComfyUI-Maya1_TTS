@@ -16,7 +16,8 @@ from .utils import (
     load_emotions_list,
     format_prompt,
     check_interruption,
-    ProgressCallback
+    ProgressCallback,
+    crossfade_audio
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "format_prompt",
     "check_interruption",
     "ProgressCallback",
+    "crossfade_audio",
 ]
