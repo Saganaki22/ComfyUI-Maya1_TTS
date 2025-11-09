@@ -82,17 +82,17 @@ pip install bitsandbytes>=0.41.0
 ```
 
 **Memory savings:**
-- 4-bit: ~6GB → ~3GB VRAM (slight quality loss)
-- 8-bit: ~6GB → ~4GB VRAM (minimal quality loss)
+- 4-bit: ~6GB → (slight quality loss)
+- 8-bit: ~6GB → (minimal quality loss)
 
 ### Accelerated Attention
 
-**Flash Attention 2** (fastest, CUDA only):
+**Flash Attention 2** (CUDA only):
 ```bash
 pip install flash-attn>=2.0.0
 ```
 
-**Sage Attention** (memory efficient):
+**Sage Attention** (memory efficient for batch):
 ```bash
 pip install sageattention>=1.0.0
 ```
@@ -183,7 +183,7 @@ snapshot_download(
 
 Restart ComfyUI to load the new nodes. The node will appear under:
 
-**Add Node → audio → Maya1 TTS (AIO)**
+**Add Node → audio → Maya1 TTS (AIO) / Maya1 TTS (AIO) Barebones**
 
 </details>
 
