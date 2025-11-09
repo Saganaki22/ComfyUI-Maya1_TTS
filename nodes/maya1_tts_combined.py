@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import random
 import re
+import gc
 from typing import Tuple, List
 
 from ..core import (
@@ -16,7 +17,6 @@ from ..core import (
     get_model_path,
     get_maya1_models_dir,
     format_prompt,
-    check_interruption,
     load_emotions_list,
     crossfade_audio
 )
@@ -167,7 +167,7 @@ class Maya1TTSCombinedNode:
                     "step": 0.05
                 }),
                 "max_tokens": ("INT", {
-                    "default": 2000,
+                    "default": 4000,
                     "min": 100,
                     "max": 16000,
                     "step": 100,
@@ -188,10 +188,6 @@ class Maya1TTSCombinedNode:
                     "default": False,
                     "tooltip": "Split long text into chunks at sentence boundaries with smooth crossfading. Enables unlimited audio length beyond the 18-20s limit"
                 }),
-                "debug_mode": ("BOOLEAN", {
-                    "default": False,
-                    "tooltip": "Show detailed console output (token IDs, generation stats) or just basics (seed, VRAM, progress)"
-                }),
             }
         }
 
@@ -199,6 +195,31 @@ class Maya1TTSCombinedNode:
     RETURN_NAMES = ("audio",)
     FUNCTION = "generate_speech"
     CATEGORY = "audio/maya1"
+
+    def cleanup_vram(self):
+        """
+        Native ComfyUI VRAM cleanup - unloads all models and clears cache.
+        Follows best practices from ComfyUI's memory management system.
+        """
+        import comfy.model_management as mm
+
+        print("🗑️  Cleaning up VRAM...")
+
+        # Step 1: Unload all models from VRAM
+        mm.unload_all_models()
+
+        # Step 2: Clear ComfyUI's internal cache
+        mm.soft_empty_cache()
+
+        # Step 3: Python garbage collection
+        gc.collect()
+
+        # Step 4: Clear CUDA caches (if available)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+
+        print("✅ VRAM cleanup complete")
 
     def generate_speech(
         self,
@@ -215,7 +236,6 @@ class Maya1TTSCombinedNode:
         repetition_penalty: float,
         seed: int,
         chunk_longform: bool,
-        debug_mode: bool,
         emotion_tag_insert: str = "(none)"
     ) -> Tuple[dict]:
         """
@@ -224,8 +244,12 @@ class Maya1TTSCombinedNode:
         Returns:
             Tuple containing audio dictionary for ComfyUI
         """
+        # Import ComfyUI utilities for progress and cancellation
+        import comfy.utils
+        import comfy.model_management as mm
+
         # Check for cancellation before starting
-        check_interruption()
+        mm.throw_exception_if_processing_interrupted()
 
         # Simple seed logic: if seed is 0, randomize; otherwise use the provided seed
         # This way seed=0 is always random, and you can set a specific seed for reproducibility
@@ -321,7 +345,7 @@ class Maya1TTSCombinedNode:
                 f"Device: {device}"
             )
 
-        check_interruption()
+        mm.throw_exception_if_processing_interrupted()
 
         # ========== SPEECH GENERATION ==========
         print(f"Keep in VRAM: {keep_model_in_vram}")
@@ -349,6 +373,9 @@ class Maya1TTSCombinedNode:
             text_chunks = split_text_smartly(text, max_words_per_chunk=estimated_words_per_chunk)
             print(f"📦 Split into {len(text_chunks)} chunks")
 
+            # Create outer progress bar for chunks (layered progress)
+            chunk_progress = comfy.utils.ProgressBar(len(text_chunks))
+
             all_audio_data = []
             sample_rate = None
 
@@ -357,6 +384,9 @@ class Maya1TTSCombinedNode:
                 print(f"🎤 Generating chunk {i + 1}/{len(text_chunks)}")
                 print(f"📝 Text: {chunk_text[:60]}...")
                 print(f"{'=' * 70}")
+
+                # Check for cancellation before each chunk
+                mm.throw_exception_if_processing_interrupted()
 
                 # Recursively call generate_speech for this chunk with chunk_longform=False
                 # to avoid infinite recursion
@@ -374,7 +404,6 @@ class Maya1TTSCombinedNode:
                     repetition_penalty=repetition_penalty,
                     seed=actual_seed,  # Use same seed for all chunks
                     chunk_longform=False,  # Disable chunking for recursive calls
-                    debug_mode=debug_mode,  # Pass debug mode through
                     emotion_tag_insert=emotion_tag_insert
                 )
 
@@ -382,9 +411,12 @@ class Maya1TTSCombinedNode:
                 chunk_audio_dict = chunk_audio[0]
                 chunk_waveform = chunk_audio_dict["waveform"]
                 sample_rate = chunk_audio_dict["sample_rate"]
+
+                # Update chunk progress (outer progress bar)
+                chunk_progress.update(1)
                 all_audio_data.append(chunk_waveform)
 
-                check_interruption()
+                mm.throw_exception_if_processing_interrupted()
 
             print(f"\n{'=' * 70}")
             print(f"🔗 Combining {len(all_audio_data)} audio chunks with crossfading...")
@@ -412,8 +444,7 @@ class Maya1TTSCombinedNode:
 
             # Handle VRAM cleanup if requested
             if not keep_model_in_vram:
-                Maya1ModelLoader.clear_cache(force=True)
-                print("🗑️  Model cleared from VRAM")
+                self.cleanup_vram()
 
             return ({
                 "waveform": combined_waveform,
@@ -468,7 +499,7 @@ class Maya1TTSCombinedNode:
         inputs = {k: v.to(device) for k, v in inputs.items()}
 
         # Check for cancellation
-        check_interruption()
+        mm.throw_exception_if_processing_interrupted()
 
         # Generate with progress tracking and cancellation checks
         print(f"🎵 Generating speech (max {max_tokens} tokens)...")
@@ -514,14 +545,13 @@ class Maya1TTSCombinedNode:
                             print(f"   Tokens: {new_tokens}/{max_tokens} | Speed: {it_per_sec:.2f} it/s | Elapsed: {elapsed:.1f}s", end='\r')
                             self.last_print_time = current_time
 
-                    # Check for cancellation
+                    # Check for cancellation using ComfyUI's native method
                     try:
-                        import execution
-                        if hasattr(execution, 'interruption_requested') and execution.interruption_requested():
-                            print("\n🛑 Generation cancelled by user")
-                            return True  # Stop generation
+                        mm.throw_exception_if_processing_interrupted()
                     except:
-                        pass
+                        # If interrupted, stop generation gracefully
+                        print("\n🛑 Generation cancelled by user")
+                        return True  # Stop generation
 
                     return False  # Continue generation
 
@@ -561,7 +591,7 @@ class Maya1TTSCombinedNode:
             generation_time = time.time() - generation_start
 
             # Check for cancellation after generation
-            check_interruption()
+            mm.throw_exception_if_processing_interrupted()
 
             # Extract generated tokens (remove input tokens)
             generated_ids = outputs[0, inputs['input_ids'].shape[1]:].tolist()
@@ -591,14 +621,14 @@ class Maya1TTSCombinedNode:
             print(f"🎵 Found {len(snac_tokens)} SNAC tokens ({len(snac_tokens) // 7} frames)")
 
             # Check for cancellation before decoding
-            check_interruption()
+            mm.throw_exception_if_processing_interrupted()
 
             # Decode SNAC tokens to audio
             print("🔊 Decoding to audio...")
             audio_waveform = SNACDecoder.decode(snac_tokens, device=device)
 
             # Check for cancellation after decoding
-            check_interruption()
+            mm.throw_exception_if_processing_interrupted()
 
             # Convert to ComfyUI audio format
             audio_tensor = torch.from_numpy(audio_waveform).float()
@@ -619,9 +649,7 @@ class Maya1TTSCombinedNode:
 
             # Handle VRAM management based on toggle
             if not keep_model_in_vram:
-                print("🗑️  Offloading model from VRAM...")
-                Maya1ModelLoader.clear_cache(force=True)
-                print("✅ Model offloaded from VRAM")
+                self.cleanup_vram()
             else:
                 print("💾 Model kept in VRAM for faster next generation")
 
