@@ -181,9 +181,9 @@ class Maya1TTSBarebonesNode:
                     "default": "bfloat16",
                     "tooltip": "Model precision. 4bit/8bit save VRAM but are SLOWER. Use float16/bfloat16 if you have 10GB+ VRAM for best speed. 4bit≈6GB, 8bit≈7GB, float16/bfloat16≈8-9GB, float32≈16GB"
                 }),
-                "attention_mechanism": (["sdpa", "flash_attention_2", "sage_attention"], {
+                "attention_mechanism": (["sdpa", "eager", "flash_attention_2", "sage_attention"], {
                     "default": "sdpa",
-                    "tooltip": "Attention algorithm. SDPA (default) is fastest for single TTS. Flash Attention 2 helps with batch processing. Sage Attention is memory efficient. Stick with SDPA unless you know what you're doing"
+                    "tooltip": "Attention algorithm. SDPA (default) is fastest for single TTS. Eager is standard PyTorch (slower). Flash Attention 2 helps with batch processing. Sage Attention is memory efficient"
                 }),
                 "device": (["cuda", "cpu"], {
                     "default": "cuda",
