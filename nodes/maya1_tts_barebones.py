@@ -199,12 +199,12 @@ class Maya1TTSBarebonesNode:
                     "default": False,
                     "tooltip": "Split long text into chunks at sentence boundaries with smooth crossfading. Enables unlimited audio length beyond the 18-20s limit. EXPERIMENTAL - may have quality/timing issues"
                 }),
-                "max_tokens": ("INT", {
+                "max_new_tokens": ("INT", {
                     "default": 4000,
                     "min": 100,
                     "max": 16000,
                     "step": 100,
-                    "tooltip": "Max SNAC tokens per chunk. Higher = longer audio per chunk (~50 tokens/word). 4000 tokens ≈ 30-40s audio. Increase if audio cuts off too early"
+                    "tooltip": "Maximum NEW SNAC tokens to generate per chunk (excludes input prompt tokens). Higher = longer audio per chunk (~50 tokens/word). 4000 tokens ≈ 30-40s audio. Increase if audio cuts off too early"
                 }),
                 "temperature": ("FLOAT", {
                     "default": 0.4,
@@ -277,7 +277,7 @@ class Maya1TTSBarebonesNode:
         device: str,
         keep_model_in_vram: bool,
         chunk_longform: bool,
-        max_tokens: int,
+        max_new_tokens: int,
         temperature: float,
         top_p: float,
         repetition_penalty: float,
@@ -400,7 +400,7 @@ class Maya1TTSBarebonesNode:
         print(f"Voice: {voice_description[:60]}...")
         print(f"Text: {text[:60]}...")
         print(f"Temperature: {temperature}, Top-p: {top_p}")
-        print(f"Max tokens: {max_tokens}")
+        print(f"Max tokens: {max_new_tokens}")
         print("=" * 70)
 
         # ========== LONGFORM CHUNKING ==========
@@ -410,13 +410,13 @@ class Maya1TTSBarebonesNode:
             print(f"📚 Longform mode enabled: {word_count} words detected")
             print(f"🔪 Splitting text into chunks at sentence boundaries...")
 
-            # Calculate words per chunk based on max_tokens
+            # Calculate words per chunk based on max_new_tokens
             # Empirical data: 1 word ≈ 50-55 SNAC tokens
-            # Leave some headroom (80%) to avoid exceeding max_tokens
-            estimated_words_per_chunk = int((max_tokens * 0.8) / 50)
+            # Leave some headroom (80%) to avoid exceeding max_new_tokens
+            estimated_words_per_chunk = int((max_new_tokens * 0.8) / 50)
             estimated_words_per_chunk = max(50, min(estimated_words_per_chunk, 300))  # Clamp between 50-300
 
-            print(f"📏 Max tokens: {max_tokens} → ~{estimated_words_per_chunk} words per chunk (~{estimated_words_per_chunk / 150:.1f}min per chunk)")
+            print(f"📏 Max tokens: {max_new_tokens} → ~{estimated_words_per_chunk} words per chunk (~{estimated_words_per_chunk / 150:.1f}min per chunk)")
 
             text_chunks = split_text_smartly(text, max_words_per_chunk=estimated_words_per_chunk)
             print(f"📦 Split into {len(text_chunks)} chunks")
@@ -449,7 +449,7 @@ class Maya1TTSBarebonesNode:
                     device=device,
                     keep_model_in_vram=True,  # Keep in VRAM between chunks
                     chunk_longform=False,  # Disable chunking for recursive calls
-                    max_tokens=max_tokens,
+                    max_new_tokens=max_new_tokens,
                     temperature=temperature,
                     top_p=top_p,
                     repetition_penalty=repetition_penalty,
@@ -556,11 +556,11 @@ class Maya1TTSBarebonesNode:
         mm.throw_exception_if_processing_interrupted()
 
         # Generate with progress tracking and cancellation checks
-        print(f"🎵 Generating speech (max {max_tokens} tokens)...")
+        print(f"🎵 Generating speech (max {max_new_tokens} tokens)...")
 
         try:
             # Setup progress tracking (inner progress bar for token generation)
-            progress_bar = comfy.utils.ProgressBar(max_tokens)
+            progress_bar = comfy.utils.ProgressBar(max_new_tokens)
 
             # Create stopping criteria for cancellation support
             from transformers import StoppingCriteria, StoppingCriteriaList
@@ -599,7 +599,7 @@ class Maya1TTSBarebonesNode:
                             it_per_sec = new_tokens / elapsed if elapsed > 0 else 0
 
                             # Create visual progress bar for tokens
-                            token_bar = create_progress_bar(new_tokens, max_tokens, width=12)
+                            token_bar = create_progress_bar(new_tokens, max_new_tokens, width=12)
 
                             # Show layered progress if in chunked mode
                             if self.chunk_index is not None and self.total_chunks is not None:
@@ -641,7 +641,7 @@ class Maya1TTSBarebonesNode:
             with torch.inference_mode():
                 outputs = maya1_model.model.generate(
                     **inputs,
-                    max_new_tokens=max_tokens,
+                    max_new_tokens=max_new_tokens,
                     min_new_tokens=28,  # At least 4 SNAC frames (4 frames × 7 tokens = 28)
                     temperature=temperature,
                     top_p=top_p,
